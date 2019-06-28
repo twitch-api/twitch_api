@@ -27,10 +27,3 @@ async def links(bot, message):
 async def stop(bot, message):
     if not message.args:
         await bot.stop()
-
-
-Commands = {
-    "ping": ping,
-    "links": links,
-    "stop": stop
-}

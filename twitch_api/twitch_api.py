@@ -5,8 +5,6 @@ from datetime import datetime, date, timedelta
 import asyncore, socket, ssl
 import requests
 
-import commands
-
 
 
 class Message:
@@ -23,10 +21,12 @@ class Message:
         self._specials = msg.split(":", 1)[0]
         if self._specials:
             try:
-                self._specials = self._specials.replace("@", "").replace(";", ",")
+                self._specials = self._specials.replace("@", "")
                 specs = {}
                 for spec in self._specials.split(";"):
-                    key, value = sepc.split("=", 1)
+                    key, value = spec.split("=", 1)
+                    specs[key] = value
+                self._specials = specs
             except:
                 pass
         msg_ = msg.split(":", 1)[-1]
@@ -66,6 +66,7 @@ class Bot:
         self.channel = kwargs.get("channel", "#pineapple_cookie_")
         self.nick = kwargs.get("nick", "Tomori")
         self.exitcode = "bye " + self.nick
+        self._commands = {}
         self.is_closed = True
 
     async def run(self):
@@ -108,6 +109,19 @@ class Bot:
         setattr(self, coro.__name__, coro)
         return coro
 
+    def command(*args, **kwargs):
+        self = args[0]
+        def set_command(coro):
+            if not asyncio.iscoroutinefunction(coro):
+                raise TypeError("Тип события '%s' должен быть корутиной" % coro.__name__)
+
+            name = str(kwargs.get("name", coro.__name__)).lower()
+
+            if not name in self._commands.keys():
+                self._commands[name] = coro
+            return coro
+        return set_command
+
     async def _get_api_token(self):
         self.api_token = None
         async with ClientSession() as session:
@@ -132,20 +146,20 @@ class Bot:
     async def _handle_command(self, msg):
         message = Message(msg)
 
-        if message.type == "join" and hasattr(self, "on_channel_join"):
-            return await self.on_channel_join(message.channel)
+        if message.type == "join" and hasattr(self, "on_member_join"):
+            return await self.on_member_join(message.author, message.channel)
         if message.type == "privmsg" and hasattr(self, "on_message"):
             return await self.on_message(message)
 
-        if message.command in commands.Commands.keys():
-            await commands.Commands[message.command](self, message)
+        if message.command in self._commands.keys():
+            await self._commands[message.command](self, message)
 
     async def process_command(self, message):
         if not isinstance(message, Message):
             message = Message(str(message))
 
-        if message.command in commands.Commands.keys():
-            await commands.Commands[message.command](self, message)
+        if message.command in self._commands.keys():
+            await self._commands[message.command](self, message)
 
     async def ping(self):
         await self._send("PONG", ":pingis")
